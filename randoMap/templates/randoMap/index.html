@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		{% load static %}
+
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+        <meta charset="utf-8">
+        <!-- Nous chargeons les fichiers CDN de Leaflet. Le CSS AVANT le JS -->
+         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ==" crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
+		
+
+        <!-- Latest compiled and minified bootstrap CSS -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+
+        <!-- jQuery library -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+        <!-- Popper JS -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+
+		<!-- Latest compiled bootstrap JavaScript -->
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
+        <link rel="stylesheet" href="{% static 'randoMap/styles.css' %}">
+
+
+		<script src="{% static 'randoMap/script.js' %}" type="text/javascript"></script>
+
+
+
+		<script type="text/javascript">
+			//CRéation d'une méthode 'capitalize'
+			String.prototype.capitalize = function() {
+			    return this.charAt(0).toUpperCase() + this.slice(1);
+			};
+
+			//Variable globale contenant les types d'emplacements pouvant être affichés sur la carte
+			all_places_types = [{'EN':'camping', 'FR':"camping"}];
+			//userLoc = [];
+			
+			all_markers = {};
+			all_places = {};
+			all_places_types.forEach(function(place_type){
+				all_places[place_type.EN] = {};
+				all_markers[place_type.EN] = new L.layerGroup();
+			});
+			participate_marker = new L.layerGroup();
+			participate = false;
+
+
+
+			function initMap(userLoc) {
+				// Créer l'objet "macarte" et l'insèrer dans l'élément HTML qui a l'ID "map"
+				const all_places_types = ['camping'];
+				userLocation = userLoc;
+			    macarte = L.map('map').setView(userLoc, 12);
+			    //Récupération des cartes sur openstreetmap.fr
+			   	L.tileLayer('https://tile.thunderforest.com/cycle/{z}/{x}/{y}.png?apikey=3bbb3f952f5e433b8eedf4cec24fbb18', {
+			        // Il est toujours bien de laisser le lien vers la source des données
+			        attribution: 'données © <a href="//osm.org/copyright">OpenStreetMap</a>/ODbL - rendu <a href="//openstreetmap.fr">OSM France</a>',
+			        minZoom: 10,
+			        maxZoom: 20
+			    }).addTo(macarte);
+			    L.control.scale().addTo(macarte);
+			    //Ajout du pannau de contrôle gauche
+				panneau.addTo(macarte);
+				connexionButton.addTo(macarte);
+				{% if user.is_authenticated %}
+					participateButton.addTo(macarte);
+					$('.participate-btn').on('click', addPlace);
+				{% endif %}
+				
+				//Ajout de l'icone vélo de l'utilisateur
+			   	L.marker(userLoc, {icon: getIcon('bike')}).addTo(macarte);
+			   	//Le panneau de détails d'un lieu n'est plus affiché si l'utilisateur bouge la carte
+				const checkboxs = $('.checkboxshow');
+
+				//Création d'un gestionnaire d'évènements 'mouvement' de la carte
+			   	macarte.on('moveend', (e) => {
+					//Si la carte est bougée par l'utilisateur le panneau de détails d'un lieu n'est plus affiché si il était ouvert
+			   		if (L.DomUtil.get(id="divPlaceInfos") != null) {
+						command.remove();	
+					}
+					//Si la carte est bougée une nouvelle requête est envoyée à l'app web afin d'obtenir les nouveaux lieux autour
+					Array.prototype.forEach.call(checkboxs, function(checkbox) {
+						//Exécution de la requête uniquement si au moins une case de lieu est cochée
+						if (checkbox.checked){ getPlaces(checkbox.getAttribute('placeType')) }	
+					});
+				});
+					//Le panneau de détails d'un lieu n'est plus affiché si l'utilsateur bouge la carte :
+					/*
+					Array.prototype.forEach.call(checkboxs, function(checkbox) {
+			   		checkbox.addEventListener("change", (e) => {
+			   			checkbox.addEventListener('change', function() {
+    						if(this.checked) {
+        						getPlaces(e.target.getAttribute('placetype'));
+    						} else {
+        						const layers = all_markers[e.target.getAttribute('placetype')];
+								macarte.removeLayer(layers);
+    						}
+						});	
+					});
+			   	})
+			   	*/
+					/*
+					all_places_types.forEach(function(place_type){
+						console.log(place_type);
+						if ($('#'+place_type+"_checkbox").is(':checked')){ getPlaces(place_type) };		
+					});
+				});
+				*/
+			   	
+			   	//Suppression du panneau de détails d'un lieu, si il est ouvert, en cas de clic sur la carte
+			   	macarte.on('click', (e) => {
+			   		if (L.DomUtil.get(id="divPlaceInfos") != null) {
+						command.remove();	
+					};
+			 	});
+			 	
+
+			   	Array.prototype.forEach.call(checkboxs, function(checkbox) {
+			   		checkbox.addEventListener("change", (e) => {
+			   			if (e.target.checked) {
+							getPlaces(e.target.getAttribute('placetype'));
+						} else {
+							//console.log(e);
+							//console.log(e.target.getAttribute('placetype'));
+							const layers = all_markers[e.target.getAttribute('placetype')];
+							console.log(layers._layers);
+							//macarte.removeLayer(layers);
+							layers.eachLayer(function(marker){marker.remove()});
+						}	
+					});
+			   	})
+			}
+
+		
+			var macarte = null;
+
+			function geoFindMe() {
+
+				function success(position) {
+					const latitude  = position.coords.latitude;
+					const longitude = position.coords.longitude;
+
+					initMap([latitude, longitude]);				
+				}
+
+				function error() {
+					const latitude  = '48.5734053';
+					const longitude = '7.7521113';
+
+					initMap([latitude, longitude]);
+				}
+
+				if (!navigator.geolocation) {
+					console.log('Géolocalisation indisponible');
+				} else {
+					navigator.geolocation.getCurrentPosition(success, error);
+				}
+
+			}
+
+			$(document).ready(geoFindMe);
+	
+
+		function button_url(button_type){
+			if (button_type == 'connexion'){
+				{% if user.is_authenticated %}
+						return '{% url "moncompte" %}'
+				{% else %}
+						return '{% url "connexion" %}'
+				{% endif %}
+			} else if (button_type == 'participate'){
+				return '#'
+			}
+		}
+
+		function button_text(button_type){
+			if (button_type == 'connexion'){
+				{% if user.is_authenticated %}
+					return 'Mon compte'
+				{% elif user.is_authenticated is not True %}
+					return 'Connexion'
+				{% endif %}
+			} else if (button_type == 'participate'){
+				return 'Participer'
+			}
+		}
+
+
+
+		//Création du bouton connexion / mon compte
+		function createButton(macarte, button_type, bootstrap_class){
+			var container = L.DomUtil.create('a', 'leaflet-bar leaflet-control leaflet-control-custom custom-button');
+				container.innerHTML = '<button name="button">' + button_text(button_type) + '</button>';
+				container.href = button_url(button_type=button_type);
+				container.firstElementChild.classList.add('btn', bootstrap_class, button_type + '-btn');
+				
+
+				return container;
+		} 
+
+		function removeMarkers(){
+			if (participate_marker._layers){
+				participate_marker.eachLayer( function(marker){marker.remove()});
+				participate_marker.clearLayers();
+			}
+		}
+		
+
+		function addMarker(e){
+			removeMarkers();
+			var newMarker = new L.marker(e.latlng).addTo(macarte);
+			const location = e.latlng.lat + ',' + e.latlng.lng;
+			console.log(location);
+			
+			//newMarker.bindPopup('<form id="newSpotForm" method="post" action={% url "newSpot" %}>{% csrf_token %}{{placeNameForm}}<p><select form="newSpotForm" name="place_type", required_id="id_place_type"><option value="CP">Camping</option><option value="BV">Bivouac</option><option value="PT">Particulier</option><option value="GT">Gîte</option><option value="HT">Hôtel</option></select></p>{{ placeForm.management_form }}{% for form in placeForm %}{{ form }}{% endfor %}<input type="submit" value="Envoyer"></form>').openPopup();
+			newMarker.bindPopup('<form id="newSpotForm" method="post" action={% url "newSpot" %}>{% csrf_token %}{{newPlaceForm}}<p><select form="newSpotForm" name="place_type", required_id="id_place_type"><option value="CP">Camping</option><option value="BV">Bivouac</option><option value="PT">Particulier</option><option value="GT">Gîte</option><option value="HT">Hôtel</option></select></p><input id="lat_field" type="hidden" name="lat" value=' + e.latlng.lat + '><input id="lng_field" type="hidden" name="lng" value=' + e.latlng.lng + '><input type="submit" value="Envoyer"></form>').openPopup();
+
+
+			
+			//console.log(e.latlng);
+			//const location = e.latlng.lat.toString() + e.latlng.lng.toString();
+			//console.log(location);
+			//console.log($(".location_field"));
+			//$(".location_field").attr({value:"Coords GPS"});
+			//console.log($(".location_field").attr("value"));
+			
+			participate_marker.addLayer(newMarker);
+		}
+
+		function addPlace(e){
+			e.stopPropagation();
+			if (participate == false){
+				macarte.on('click', addMarker);
+				participate = true;
+			} else {
+				macarte.off('click', addMarker);
+				removeMarkers();
+				participate = false;
+			}
+		}
+
+
+
+		connexionButton = L.control({position: 'topright'});
+		connexionButton.onAdd = function (macarte) {
+			button = createButton(macarte, button_type='connexion', bootstrap_class='btn-success');
+			return button
+		}
+
+		participateButton = L.control({position: 'topright'});
+		participateButton.onAdd = function (macarte) {
+			button = createButton(macarte, button_type='participate', bootstrap_class='btn-success');
+			return button
+		}
+
+
+		//Création du panneau de contrôle
+		panneau = L.control({position: 'topleft'});
+		panneau.onAdd = function (macarte) {
+			var div = L.DomUtil.create('div', 'command');
+			all_places_types.forEach(function(place_type){
+				div.innerHTML += '<p><form><input id="' + place_type.FR + "_checkbox" + '" class="checkboxshow"' + '" type="checkbox" placeType="' + place_type.EN + '"" />' + place_type.FR.capitalize() + '</form></p>';
+			});
+			div.id = 'panneauControle';
+
+			return div
+			};
+
+
+		function getPlaces(place_type){
+			$.post(
+				'getplaces/',
+				{
+				csrfmiddlewaretoken: "{{ csrf_token }}",
+				coords : macarte.getCenter()['lat'].toString() + ',' + macarte.getCenter()['lng'].toString(),
+				place_type: place_type
+				},
+				function (places_from_server, status){
+					displayPlacesOnMap(places_from_server)
+				}
+			)
+		}
+
+
+		function displayPlacesOnMap(places_from_server){
+			const place_type = places_from_server['place_type'];
+			const new_places = places_from_server['places'];
+			const already_displayed_places = all_places[place_type];
+			for (place_id in new_places){
+				if (!(place_id in already_displayed_places)){
+					//Enregistrement du nouveau lieux dans la variable globale all_places :
+					all_places[place_type][place_id] = "";
+					//Création d'un nouvel objet L.marker correspondant au nouveau lieu :
+					const marker = new L.marker([new_places[place_id]['geometry']['location']['lat'],
+												new_places[place_id]['geometry']['location']['lng']],
+												{icon: getIcon(place_type),'place_id':place_id,}
+												);
+					//Incorporation du nouvel objet L.marker à la variable globale all_markers :
+					all_markers[place_type].addLayer(marker);
+					//Association d'un gestionnaire d'événement click au nouvel objet L.Marker :
+					marker.on("click", function(event){
+						getPlaceDetails(event.sourceTarget.options.place_id);
+					});
+				}
+			}
+			all_markers[place_type].eachLayer(function(marker){marker.addTo(macarte)});
+		}
+
+		function getPlaceDetails(place_id){
+			$.post(
+				'getplacedetails/',
+				{
+					csrfmiddlewaretoken: "{{ csrf_token }}",
+					user_lat : userLocation[0],
+					user_lng : userLocation[1],
+					place_id : place_id,
+				},
+				function(place_details, statut){
+				    displayAllPlaceDetails(place_details);
+				}
+			)
+		};
+
+		function displayOpeningHours(openings){
+			if (openings != undefined) {
+				console.log(openings);
+				const date = new Date();
+				const day = date.getDay();
+				var today_openings = openings['weekday_text'][day];
+				var a_afficher = "<p>Horaires : " + today_openings + "</p>";
+				return a_afficher
+			} else {
+				return "<p>Horaires non renseignés</p>"
+			};
+
+		}
+
+		function displayAllPlaceDetails(place_details) {
+			if (L.DomUtil.get(id="divPlaceInfos") != null) {
+				command.remove();	
+			};
+
+			var info_types = ['name', 'address', 'rating', 'distance', 'devPositif', 'devNegatif', 'openings', 'phone_number', 'website', 'url'];
+
+			command = L.control({position: 'topright'});
+			command.onAdd = function (macarte) {
+	    		var div_place_infos = L.DomUtil.create('div', 'command');
+	    		div_place_infos.setAttribute('id', 'divPlaceInfos');
+	    		info_types.forEach(info_type => {
+		    		switch (info_type) {
+		    			case 'name':
+		    				div_place_infos.innerHTML += "<p>"+ place_details['name'] + "</p>";
+		    				break;
+		    			case 'address':
+		    				if (place_details['vicinity'] == undefined){
+		    					div_place_infos.innerHTML += "<p>" + "Aucune adresse renseignée" + "</p>";
+		    				} else {
+		    					div_place_infos.innerHTML += "<p>"+ place_details['vicinity'] + "</p>";
+		    				};
+		    				break;
+		    			case 'rating':
+		    				if (place_details['rating'] == undefined){
+		    					div_place_infos.innerHTML += "<p>Aucune note</p>";
+		    				} else {
+		    					div_place_infos.innerHTML += "<p>"+ place_details['rating'] + "/" + "5 (" + place_details['user_ratings_total'] + " notes)" + "</p>";
+		    				};
+		    				break;
+		    			/*
+		    			case 'distance':
+		    				div_place_infos.innerHTML += '<p>Distance : ' + place_details[info_type] + "</p>";
+		    				break;
+		    			case 'devPositif':
+		    				div_place_infos.innerHTML += "<p>  D+ : " + place_details['devPositif'] + "m" + "   D- : " + place_details['devNegatif'] + "m" + "</p>";
+		    				break;
+		    			*/
+		    			case 'openings':
+		    				div_place_infos.innerHTML += displayOpeningHours(place_details['opening_hours']);
+		    				break;
+		    			case 'phone_number':
+		    				if (place_details['formatted_phone_number'] == undefined){
+		    					div_place_infos.innerHTML += '<p>Aucun numéro renseigné</p>';
+		    				} else if ( /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ) {
+					    		div_place_infos.innerHTML += '<p><a href="tel:'+ place_details['phone_number'] +'">'+ place_details['phone_number'] +'</a></p>';
+					    	} else {
+					    		div_place_infos.innerHTML += '<p>' + place_details['formatted_phone_number'] + '</p>'
+					    	};
+					    	break;
+		    			case 'website':
+		    				if (place_details['website'] == undefined){
+		    					div_place_infos.innerHTML += "<p>Aucun site web renseigné</p>";
+		    				} else {
+		 						div_place_infos.innerHTML += "<p><a href='" + place_details["website"] + "'>" + place_details['website'] + "<a></p>";
+		    				}
+		    				break;
+		    			case 'url':
+		    				div_place_infos.innerHTML += "<a target='_blank' href='" + place_details['url'] + "'>Afficher sur google maps</a>"
+		    				break;
+		    			}
+		    	});
+		    	div_place_infos.innerHTML += "<p><a href='#' id='edit-link'>Edit</a></p>"
+	    		return div_place_infos;
+			};
+			
+			command.addTo(macarte);
+			command.onclick = function(event) {
+				event.stopPropagation();
+			}
+			$("#edit-link").onclick = function(event){
+				if (L.DomUtil.get(id="divPlaceInfos") != null) {
+				command.remove();	
+				}
+
+				editPlace = L.control({position: 'topright'});
+				editPlace.onAdd = function (macarte) {
+					var div_place_infos = L.DomUtil.create('div', 'command');
+					div_place_infos.setAttribute('id', 'divEditPlace');
+					div_place_infos.innerHTML = "";
+				
+				}
+			}
+		}
+
+		
+
+		function getIcon(place_type){
+			switch (place_type){
+				case 'bike':
+					var icon = L.icon({
+						iconUrl: "{% static 'randoMap/velo.png' %}",
+						iconSize:     [30, 30], // size of the icon
+						iconAnchor:   [50, 50], // point of the icon which will correspond to marker's location
+						popupAnchor:  [-3, -76] // point from which the popup should open relative to the iconAnchor
+					});
+					break;
+				case 'camping':
+					var icon = L.icon({
+						iconUrl: "{% static 'randoMap/camping.png' %}",
+						iconSize:     [30, 30], // size of the icon
+						iconAnchor:   [50, 50], // point of the icon which will correspond to marker's location
+						popupAnchor:  [-3, -76] // point from which the popup should open relative to the iconAnchor
+					});
+					break;
+				case 'grocery':
+					var icon = L.icon({
+						iconUrl: "{% static 'randoMap/grocery.png' %}",
+						iconSize:     [30, 30], // size of the icon
+						iconAnchor:   [50, 50], // point of the icon which will correspond to marker's location
+						popupAnchor:  [-3, -76] // point from which the popup should open relative to the iconAnchor
+					});
+					break;
+				case 'bike shop':
+					var icon = L.icon({
+						iconUrl: "{% static 'randoMap/bike_shop.png' %}",
+						iconSize:     [30, 30], // size of the icon
+						iconAnchor:   [50, 50], // point of the icon which will correspond to marker's location
+						popupAnchor:  [-3, -76] // point from which the popup should open relative to the iconAnchor
+					});
+					break;
+			}
+			return icon
+		};
+
+		
+
+
+		
+		</script>
+		
+
+		<title>EasyCyclo</title>
+	</head>
+	<body>
+		
+    	
+		<div id="map">
+			
+			
+		</div>
+
+		
+	</body>
+</html>

@@ -1,0 +1,53 @@
+{% extends "easyRando/base.html" %}
+{% load static %}
+
+{% block specificcs %}
+    <link rel="stylesheet" type='text/css' href="{% static 'easyRando/connexion.css' %}" media="all">
+{% endblock specificcs %}
+
+
+{% block content %}
+
+  {% if messages %}
+      {% for message in messages %}
+        {% if error %}
+          <div class="alert alert-danger" role="alert">
+          {{ message }}
+          </div>
+        {% else %}
+          <div class="alert alert-success" role="alert">
+          {{ message }}
+          </div>
+        {% endif %}
+      {% endfor %}
+  </ul>
+  {% endif %}
+  <div class="login-page">
+    <div class="form">
+      <form class="register-form" action="{% url 'creercompte' %}" method='post'>
+        <!--
+        <input type="text" placeholder="name"/>
+        <input type="password" placeholder="password"/>
+        <input type="text" placeholder="email address"/>
+        <button type="submit">Créer mon compte</button>
+        -->
+        {% csrf_token %}
+        {{ newusrform }}
+        <button type="submit">Créer mon compte</button>
+        <p class="message">Vous avez déjà un compte? <a href="#">Se connecter</a></p>
+      </form>
+      <form class="login-form" action="{% url 'connexion' %}" method='post'>
+        {% csrf_token %}
+        {{ logform }}
+        <button type="submit">Connexion</button>
+        <p class="message">Pas encore de compte? <a href="#">Créer un compte</a></p>
+      </form>
+    </div>
+  </div>
+  <script type="text/javascript">
+  $('.message a').click(function(){
+     $('form').animate({height: "toggle", opacity: "toggle"}, "slow");
+  });
+  </script>
+
+{% endblock content %}
